@@ -12,3 +12,4 @@ seedRouter.post('/', async (_req: Request, res: Response) => {
   const result = await ensureDbSeeded();
   res.json(result);
 });
+

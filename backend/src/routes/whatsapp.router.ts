@@ -49,3 +49,4 @@ whatsappRouter.post('/send', async (req: Request, res: Response) => {
     res.status(500).json({ success: false, error: 'Failed to send WhatsApp message' });
   }
 });
+

@@ -38,3 +38,4 @@ aiRouter.post('/generate-ad', async (req: Request, res: Response) => {
     res.status(500).json({ success: false, error: 'Failed to generate ad copy' });
   }
 });
+
