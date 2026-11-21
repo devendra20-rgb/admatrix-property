@@ -1,17 +1,16 @@
 # dependencies
-/node_modules
-/.pnp
+node_modules/
+.pnp
 .pnp.js
 
 # testing
-/coverage
+coverage/
 
-# next.js
-/.next/
-/out/
-
-# production
-/build
+# next.js & builds
+.next/
+out/
+dist/
+build/
 
 # misc
 .DS_Store
@@ -34,5 +33,5 @@ yarn-error.log*
 next-env.d.ts
 
 # SQLite database
-dev.db
-dev.db-journal
+*.db
+*.db-journal

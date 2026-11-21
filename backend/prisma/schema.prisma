@@ -1,0 +1,225 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Organization {
+  id          String   @id @default(uuid())
+  name        String
+  tradeLicense String?
+  reraNumber  String?
+  phone       String?
+  email       String?
+  address     String?
+  logoUrl     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+  properties  Property[]
+  campaigns   Campaign[]
+  leads       Lead[]
+  adCreatives AdCreative[]
+}
+
+model User {
+  id             String        @id @default(uuid())
+  email          String        @unique
+  name           String
+  role           String        @default("BROKER") // SUPER_ADMIN, BROKERAGE_ADMIN, BROKER
+  phone          String?
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  properties     Property[]
+  campaigns      Campaign[]
+  assignedLeads  Lead[]        @relation("AssignedLeads")
+  createdLeads   Lead[]        @relation("CreatedLeads")
+}
+
+model Property {
+  id                  String   @id @default(uuid())
+  title               String
+  description         String
+  propertyType        String   // Apartment, Villa, Penthouse, Townhouse, Commercial
+  listingType         String   // Sale, Rent
+  price               Float
+  currency            String   @default("AED")
+  bedrooms            Int
+  bathrooms           Int
+  builtUpArea         Float    // sqft
+  furnishingStatus    String   // Furnished, Unfurnished, Semi-Furnished
+  
+  // Location
+  emirate             String   @default("Dubai")
+  community           String   // e.g. Dubai Marina, Downtown, Business Bay
+  buildingProject     String?
+  address             String
+  latitude            Float?
+  longitude           Float?
+
+  // Compliance (Trakheesi)
+  trakheesiPermitNo   String?
+  permitExpiryDate    DateTime?
+  qrCodeUrl           String?  // Madmoun QR
+  formACompleted      Boolean  @default(false)
+  complianceStatus    String   @default("INCOMPLETE") // COMPLIANT, INCOMPLETE, EXPIRED, ACTION_REQUIRED
+  complianceNotes     String?
+
+  // Off-plan
+  isOffPlan           Boolean  @default(false)
+  developerName       String?
+  escrowNumber        String?
+  completionDate      DateTime?
+
+  // Status
+  status              String   @default("ACTIVE") // ACTIVE, DRAFT, ARCHIVED
+  coverImage          String?
+  images              String?  // JSON array of image URLs
+
+  organizationId      String
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdById         String
+  createdBy           User         @relation(fields: [createdById], references: [id])
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  campaigns           Campaign[]
+  leads               Lead[]
+  adCreatives         AdCreative[]
+  complianceLogs      ComplianceLog[]
+}
+
+model ComplianceLog {
+  id          String   @id @default(uuid())
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  checkedAt   DateTime @default(now())
+  status      String
+  reason      String
+  performedBy String?
+}
+
+model AdCreative {
+  id              String   @id @default(uuid())
+  propertyId      String
+  property        Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  headline        String
+  primaryText     String
+  description     String
+  callToAction    String   @default("Learn More")
+  language        String   @default("en") // en, ar, both
+  platform        String   // META, GOOGLE
+  format          String   // SQUARE (1080x1080), PORTRAIT (1080x1350), STORY (1080x1920)
+  templateStyle   String   @default("MODERN_LUXURY")
+  
+  imageUrl        String?
+  renderedImageUrl String?
+  trakheesiOverlay Boolean @default(true)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  campaigns       Campaign[]
+}
+
+model Campaign {
+  id              String   @id @default(uuid())
+  name            String
+  platform        String   // META, GOOGLE, BOTH
+  objective       String   // LEADS, TRAFFIC, AWARENESS
+  status          String   @default("DRAFT") // DRAFT, PENDING_APPROVAL, ACTIVE, PAUSED, COMPLETED, FAILED
+  budgetType      String   @default("DAILY") // DAILY, LIFETIME
+  budgetAmount    Float
+  currency        String   @default("AED")
+  startDate       DateTime
+  endDate         DateTime?
+  
+  // Targeting
+  targetLocations String   // JSON array e.g. ["Dubai", "Abu Dhabi", "GCC"]
+  targetAudience  String?  // JSON or description
+
+  propertyId      String
+  property        Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  creativeId      String?
+  creative        AdCreative? @relation(fields: [creativeId], references: [id])
+  
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdById     String
+  createdBy       User         @relation(fields: [createdById], references: [id])
+
+  // Performance metrics cache
+  spend           Float    @default(0)
+  impressions     Int      @default(0)
+  clicks          Int      @default(0)
+  leadsCount      Int      @default(0)
+  cpc             Float    @default(0)
+  cpl             Float    @default(0)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  leads           Lead[]
+}
+
+model Lead {
+  id              String   @id @default(uuid())
+  name            String
+  phone           String
+  email           String?
+  status          String   @default("NEW") // NEW, CONTACTED, INTERESTED, FOLLOW_UP, QUALIFIED, CONVERTED, LOST
+  sourcePlatform  String   // META, GOOGLE, WHATSAPP, DIRECT
+  notes           String?
+  
+  propertyId      String?
+  property        Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  campaignId      String?
+  campaign        Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  assignedToId    String?
+  assignedTo      User?    @relation("AssignedLeads", fields: [assignedToId], references: [id])
+  createdById     String?
+  createdBy       User?    @relation("CreatedLeads", fields: [createdById], references: [id])
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  activities      LeadActivity[]
+  whatsappMessages WhatsAppMessage[]
+}
+
+model LeadActivity {
+  id        String   @id @default(uuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type      String   // STATUS_CHANGE, NOTE_ADDED, WHATSAPP_SENT, CALL_LOGGED
+  title     String
+  details   String?
+  createdAt DateTime @default(now())
+}
+
+model WhatsAppMessage {
+  id          String   @id @default(uuid())
+  leadId      String
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  direction   String   // INBOUND, OUTBOUND
+  content     String
+  status      String   @default("DELIVERED") // SENT, DELIVERED, READ, FAILED
+  templateName String?
+  createdAt   DateTime @default(now())
+}
+
