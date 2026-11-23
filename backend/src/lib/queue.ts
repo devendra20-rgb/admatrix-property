@@ -51,6 +51,11 @@ export const campaignQueue = new Queue(QUEUE_NAMES.CAMPAIGN, defaultQueueOptions
 export const whatsappQueue = new Queue(QUEUE_NAMES.WHATSAPP, defaultQueueOptions);
 export const analyticsQueue = new Queue(QUEUE_NAMES.ANALYTICS, defaultQueueOptions);
 
+// Prevent unhandled error event crashes when Redis is offline in standalone mode
+campaignQueue.on('error', () => {});
+whatsappQueue.on('error', () => {});
+analyticsQueue.on('error', () => {});
+
 /**
  * Generates deterministic BullMQ custom job IDs strictly using hyphens and underscores.
  * NEVER contains colons, preventing Redis key delimiter interference.

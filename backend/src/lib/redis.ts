@@ -4,86 +4,125 @@ dotenv.config();
 
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6381';
 
+let hasLoggedWarning = false;
+let isRedisAvailable = false;
+
 export const redis = new Redis(REDIS_URL, {
-  maxRetriesPerRequest: 3,
+  maxRetriesPerRequest: 1,
+  enableOfflineQueue: false,
   retryStrategy(times) {
-    const delay = Math.min(times * 50, 2000);
-    return delay;
+    if (times > 2) return null; // stop retrying if redis is not running
+    return 300;
   },
   lazyConnect: true,
 });
 
 redis.on('error', (err) => {
-  console.warn('Redis connection warning:', err.message);
+  if (!hasLoggedWarning) {
+    console.warn('Redis unavailable (falling back to memory session store):', err.message);
+    hasLoggedWarning = true;
+  }
+  isRedisAvailable = false;
 });
 
 redis.on('connect', () => {
   console.log('Connected to Redis session store on ' + REDIS_URL);
+  isRedisAvailable = true;
 });
 
-// Auto-connect
+// Auto-connect once
 redis.connect().catch((err) => {
-  console.warn('Initial Redis connection failed, continuing:', err.message);
+  if (!hasLoggedWarning) {
+    console.warn('Initial Redis connection failed (falling back to memory session store):', err.message);
+    hasLoggedWarning = true;
+  }
+  isRedisAvailable = false;
 });
+
+// In-memory fallback session store for local development without Redis/Docker
+const memorySessionStore = new Map<string, { active: boolean; createdAt: number; expiresAt: number }>();
 
 export const SessionStore = {
   async storeRefreshToken(userId: string, tokenId: string, ttlSeconds = 7 * 86400): Promise<void> {
-    try {
-      const key = `session:${userId}:${tokenId}`;
-      await redis.set(key, JSON.stringify({ active: true, createdAt: Date.now() }), 'EX', ttlSeconds);
-    } catch (err) {
-      console.error('SessionStore.storeRefreshToken error:', err);
-      throw err;
+    const key = `session:${userId}:${tokenId}`;
+    if (isRedisAvailable) {
+      try {
+        await redis.set(key, JSON.stringify({ active: true, createdAt: Date.now() }), 'EX', ttlSeconds);
+        return;
+      } catch (err) {
+        // fallback to memory
+      }
     }
+    memorySessionStore.set(key, {
+      active: true,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + ttlSeconds * 1000,
+    });
   },
 
   async isValidRefreshToken(userId: string, tokenId: string): Promise<boolean> {
-    try {
-      const key = `session:${userId}:${tokenId}`;
-      const data = await redis.get(key);
-      return data !== null;
-    } catch (err) {
-      console.error('SessionStore.isValidRefreshToken error:', err);
-      // Zero-Trust Fail Closed: Never allow token validation if session store is unreachable
+    const key = `session:${userId}:${tokenId}`;
+    if (isRedisAvailable) {
+      try {
+        const data = await redis.get(key);
+        return data !== null;
+      } catch (err) {
+        // fallback to memory
+      }
+    }
+    const record = memorySessionStore.get(key);
+    if (!record) return false;
+    if (Date.now() > record.expiresAt) {
+      memorySessionStore.delete(key);
       return false;
     }
+    return record.active;
   },
 
-  /**
-   * Atomically checks and revokes a refresh token in a single Redis operation (GETDEL).
-   * Prevents race conditions during concurrent rotation requests.
-   */
   async consumeRefreshToken(userId: string, tokenId: string): Promise<boolean> {
-    try {
-      const key = `session:${userId}:${tokenId}`;
-      // In Redis 6.2+, GETDEL atomically returns and deletes the key
-      const data = await (redis as any).getdel(key);
-      return data !== null;
-    } catch (err) {
-      console.error('SessionStore.consumeRefreshToken error:', err);
+    const key = `session:${userId}:${tokenId}`;
+    if (isRedisAvailable) {
+      try {
+        const data = await (redis as any).getdel(key);
+        return data !== null;
+      } catch (err) {
+        // fallback to memory
+      }
+    }
+    const record = memorySessionStore.get(key);
+    if (!record || Date.now() > record.expiresAt) {
+      memorySessionStore.delete(key);
       return false;
     }
+    memorySessionStore.delete(key);
+    return true;
   },
 
   async revokeRefreshToken(userId: string, tokenId: string): Promise<void> {
-    try {
-      const key = `session:${userId}:${tokenId}`;
-      await redis.del(key);
-    } catch (err) {
-      console.error('SessionStore.revokeRefreshToken error:', err);
+    const key = `session:${userId}:${tokenId}`;
+    if (isRedisAvailable) {
+      try {
+        await redis.del(key);
+      } catch (err) {}
     }
+    memorySessionStore.delete(key);
   },
 
   async revokeAllUserSessions(userId: string): Promise<void> {
-    try {
-      const pattern = `session:${userId}:*`;
-      const keys = await redis.keys(pattern);
-      if (keys.length > 0) {
-        await redis.del(...keys);
+    const prefix = `session:${userId}:`;
+    if (isRedisAvailable) {
+      try {
+        const pattern = `${prefix}*`;
+        const keys = await redis.keys(pattern);
+        if (keys.length > 0) {
+          await redis.del(...keys);
+        }
+      } catch (err) {}
+    }
+    for (const key of memorySessionStore.keys()) {
+      if (key.startsWith(prefix)) {
+        memorySessionStore.delete(key);
       }
-    } catch (err) {
-      console.error('SessionStore.revokeAllUserSessions error:', err);
     }
   },
 };
-

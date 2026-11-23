@@ -1,5 +1,5 @@
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -265,7 +265,7 @@ model OutboxEvent {
   aggregateType  String    // CAMPAIGN, WHATSAPP, ANALYTICS
   aggregateId    String
   eventType      String    // CAMPAIGN_PUBLISH, WHATSAPP_OUTBOUND, ANALYTICS_DAILY_SYNC
-  payload        Json
+  payload        String
   status         String    @default("PENDING") // PENDING, CLAIMED, COMPLETED, FAILED
   jobId          String?   @unique
   retryCount     Int       @default(0)
@@ -287,7 +287,7 @@ model WebhookEvent {
   provider       String    // META, WHATSAPP, GOOGLE
   eventId        String    // Unique provider message or event ID
   eventType      String    // messages, status_update
-  payload        Json
+  payload        String
   status         String    @default("RECEIVED") // RECEIVED, PROCESSING, PROCESSED, FAILED
   organizationId String?
   createdAt      DateTime  @default(now())
@@ -306,8 +306,8 @@ model ProviderOperation {
   idempotencyKey    String    @unique
   status            String    @default("IN_FLIGHT") // IN_FLIGHT, CONFIRMED, AMBIGUOUS, FAILED
   providerReference String?
-  requestPayload    Json
-  responsePayload   Json?
+  requestPayload    String
+  responsePayload   String?
   lastError         String?
   attempts          Int       @default(1)
   organizationId    String
