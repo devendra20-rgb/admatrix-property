@@ -23,7 +23,10 @@ import {
   Send,
   Eye,
   Sliders,
+  Loader2,
+  CheckCircle2,
 } from 'lucide-react';
+import { uploadMediaFile } from '@/lib/media-upload';
 
 function AdStudioContent() {
   const searchParams = useSearchParams();
@@ -45,6 +48,8 @@ function AdStudioContent() {
   const [headlineText, setHeadlineText] = useState('');
   const [primaryText, setPrimaryText] = useState('');
   const [ctaText, setCtaText] = useState('Learn More');
+  const [savingAsset, setSavingAsset] = useState(false);
+  const [savedSuccessMessage, setSavedSuccessMessage] = useState<string | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -210,6 +215,109 @@ function AdStudioContent() {
       link.download = `Admatrix_${activeProperty.community}_${format}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
+    };
+  };
+
+  // Upload rendered creative directly to S3 Media Storage
+  const saveCreativeToS3 = async () => {
+    if (!activeProperty) return;
+    setSavingAsset(true);
+    setSavedSuccessMessage(null);
+
+    let width = 1080;
+    let height = 1080;
+    if (format === 'PORTRAIT') height = 1350;
+    if (format === 'STORY') height = 1920;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      setSavingAsset(false);
+      return;
+    }
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = activeProperty.coverImage || 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=1200&q=80';
+
+    img.onload = async () => {
+      try {
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const gradient = ctx.createLinearGradient(0, height * 0.4, 0, height);
+        gradient.addColorStop(0, 'rgba(15, 23, 42, 0)');
+        gradient.addColorStop(0.5, 'rgba(15, 23, 42, 0.7)');
+        gradient.addColorStop(1, 'rgba(15, 23, 42, 0.95)');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, width, height);
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.roundRect(40, 40, width - 80, 70, 16);
+        ctx.fill();
+
+        ctx.font = 'bold 24px Inter, sans-serif';
+        ctx.fillStyle = '#151923';
+        ctx.fillText('APEX LUXURY PROPERTIES DUBAI', 65, 84);
+
+        ctx.font = 'bold 18px Inter, sans-serif';
+        ctx.fillStyle = '#16A36A';
+        const permitStr = `TRAKHEESI PERMIT #${activeProperty.trakheesiPermitNo || '7190023419'}`;
+        ctx.fillText(permitStr, width - 420, 84);
+
+        ctx.font = 'bold 44px Inter, sans-serif';
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillText(headlineText.substring(0, 48), 60, height - 280);
+
+        ctx.font = 'bold 36px Inter, sans-serif';
+        ctx.fillStyle = '#8B7CFF';
+        ctx.fillText(`${activeProperty.currency} ${activeProperty.price?.toLocaleString()}`, 60, height - 220);
+
+        ctx.font = '500 24px Inter, sans-serif';
+        ctx.fillStyle = '#E2E8F0';
+        ctx.fillText(`${activeProperty.bedrooms} BR • ${activeProperty.builtUpArea?.toLocaleString()} SQFT • ${activeProperty.community}`, 60, height - 170);
+
+        ctx.fillStyle = '#635BFF';
+        ctx.roundRect(60, height - 120, 320, 60, 12);
+        ctx.fill();
+
+        ctx.font = 'bold 22px Inter, sans-serif';
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillText(ctaText.toUpperCase(), 90, height - 82);
+
+        canvas.toBlob(async (blob) => {
+          if (!blob) {
+            setSavingAsset(false);
+            return;
+          }
+
+          const fileName = `creative_${activeProperty.community?.toLowerCase().replace(/\s+/g, '_')}_${format.toLowerCase()}_${Date.now()}.png`;
+          const file = new File([blob], fileName, { type: 'image/png' });
+
+          try {
+            const asset = await uploadMediaFile(file, 'AD_CREATIVE', {
+              propertyId: activeProperty.id,
+            });
+
+            setSavedSuccessMessage(`Saved to S3 Media Storage: ${asset.fileName}`);
+            setTimeout(() => setSavedSuccessMessage(null), 5000);
+          } catch (uploadErr: any) {
+            console.error('Failed to upload ad creative:', uploadErr);
+            alert(`Upload failed: ${uploadErr.message || 'Unknown error'}`);
+          } finally {
+            setSavingAsset(false);
+          }
+        }, 'image/png');
+      } catch (err) {
+        console.error('Failed rendering creative:', err);
+        setSavingAsset(false);
+      }
+    };
+
+    img.onerror = () => {
+      alert('Unable to load source image for rendering.');
+      setSavingAsset(false);
     };
   };
 
@@ -524,6 +632,13 @@ function AdStudioContent() {
               </div>
 
               {/* Action Buttons */}
+              {savedSuccessMessage && (
+                <div className="flex items-center gap-2 p-2.5 bg-emerald-50 text-emerald-800 text-xs rounded-xl border border-emerald-200">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="truncate">{savedSuccessMessage}</span>
+                </div>
+              )}
+
               <div className="pt-2 flex items-center gap-3">
                 <button
                   onClick={downloadCreativePNG}
@@ -534,10 +649,18 @@ function AdStudioContent() {
                 </button>
 
                 <button
-                  onClick={() => alert('Creative saved to campaign asset library!')}
-                  className="px-4 py-2.5 text-xs font-semibold rounded-xl bg-[#F0EFFF] text-[#635BFF] hover:bg-[#D5D1FF] transition-colors"
+                  onClick={saveCreativeToS3}
+                  disabled={savingAsset}
+                  className="px-4 py-2.5 text-xs font-semibold rounded-xl bg-[#F0EFFF] text-[#635BFF] hover:bg-[#D5D1FF] transition-colors flex items-center gap-1.5 disabled:opacity-60"
                 >
-                  Save to Assets
+                  {savingAsset ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving to S3...</span>
+                    </>
+                  ) : (
+                    <span>Save to Assets</span>
+                  )}
                 </button>
               </div>
             </div>

@@ -48,7 +48,7 @@ export default function CampaignDetailsPage() {
 
   if (loading) {
     return (
-      <AppShell title="Campaign Details">
+      <AppShell title="Campaign Details" requiredRoles={['SUPER_ADMIN', 'BROKERAGE_ADMIN', 'BROKER']}>
         <div className="h-96 flex items-center justify-center text-xs text-[#737B8C]">
           Loading campaign data...
         </div>
@@ -58,7 +58,7 @@ export default function CampaignDetailsPage() {
 
   if (!campaign) {
     return (
-      <AppShell title="Campaign Not Found">
+      <AppShell title="Campaign Not Found" requiredRoles={['SUPER_ADMIN', 'BROKERAGE_ADMIN', 'BROKER']}>
         <div className="text-center py-12">
           <p className="text-sm text-[#737B8C]">The requested campaign was not found.</p>
           <Link href="/campaigns" className="mt-4 inline-block text-xs text-[#635BFF] font-semibold">
@@ -70,7 +70,11 @@ export default function CampaignDetailsPage() {
   }
 
   return (
-    <AppShell title={campaign.name} subtitle={`${campaign.platform} Ads • Property: ${campaign.property?.title}`}>
+    <AppShell
+      title={campaign.name}
+      subtitle={`${campaign.platform} Ads • Property: ${campaign.property?.title}`}
+      requiredRoles={['SUPER_ADMIN', 'BROKERAGE_ADMIN', 'BROKER']}
+    >
       <div className="space-y-6">
         {/* Top Header Card */}
         <div className="bg-white p-5 rounded-2xl border border-[#E8EAF0] shadow-card flex flex-wrap items-center justify-between gap-4">

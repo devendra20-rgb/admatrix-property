@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { AppShell } from '@/components/layout/AppShell';
 import { Badge } from '@/components/ui/Badge';
 import { ComplianceBadge } from '@/components/properties/ComplianceBadge';
+import { ImageUpload } from '@/components/ui/ImageUpload';
 import {
   Building2,
   MapPin,
@@ -379,33 +380,64 @@ export default function NewPropertyPage() {
 
           {/* STEP 3: MEDIA */}
           {step === 3 && (
-            <div className="space-y-5">
+            <div className="space-y-6">
               <div>
                 <h3 className="text-base font-semibold text-[#151923]">Step 3: Photography & Media</h3>
-                <p className="text-xs text-[#737B8C]">High-definition property photography used by AI Ad Studio.</p>
+                <p className="text-xs text-[#737B8C]">
+                  High-definition photography uploaded to S3 media storage and used by AI Ad Studio.
+                </p>
               </div>
 
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-[#151923]">Cover Image URL *</label>
+              {/* Primary Cover Image Direct Upload */}
+              <div className="p-4 bg-white rounded-2xl border border-[#E8EAF0] space-y-3">
+                <ImageUpload
+                  label="Primary Cover Photo (Required)"
+                  category="PROPERTY_COVER"
+                  multiple={false}
+                  initialUrls={formData.coverImage ? [formData.coverImage] : []}
+                  onUploadSuccess={(urls) => {
+                    if (urls.length > 0) {
+                      setFormData((prev) => ({ ...prev, coverImage: urls[0] }));
+                    }
+                  }}
+                  onRemove={() => {
+                    setFormData((prev) => ({ ...prev, coverImage: '' }));
+                  }}
+                />
+
+                <div className="pt-2 border-t border-[#E8EAF0]/60">
+                  <label className="text-[11px] font-medium text-[#737B8C] block mb-1">
+                    Or specify external Cover Photo URL
+                  </label>
                   <input
                     type="url"
                     name="coverImage"
                     value={formData.coverImage}
                     onChange={handleChange}
-                    className="w-full px-3.5 py-2 text-xs bg-[#F7F8FA] border border-[#E8EAF0] rounded-xl focus:bg-white focus:ring-1 focus:ring-[#635BFF]"
-                    required
+                    placeholder="https://..."
+                    className="w-full px-3 py-1.5 text-xs bg-[#F7F8FA] border border-[#E8EAF0] rounded-xl focus:bg-white focus:ring-1 focus:ring-[#635BFF]"
                   />
                 </div>
+              </div>
 
-                {formData.coverImage && (
-                  <div className="relative h-60 w-full rounded-xl overflow-hidden border border-[#E8EAF0] bg-slate-100">
-                    <img src={formData.coverImage} alt="Cover Preview" className="w-full h-full object-cover" />
-                    <div className="absolute bottom-2 left-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded backdrop-blur">
-                      Primary Cover Photo
-                    </div>
-                  </div>
-                )}
+              {/* Gallery Photos Multi-Upload */}
+              <div className="p-4 bg-white rounded-2xl border border-[#E8EAF0] space-y-3">
+                <ImageUpload
+                  label="Gallery Photos (Multiple S3 Media Upload)"
+                  category="PROPERTY_IMAGE"
+                  multiple={true}
+                  maxFiles={12}
+                  initialUrls={formData.additionalImages}
+                  onUploadSuccess={(urls) => {
+                    setFormData((prev) => ({ ...prev, additionalImages: urls }));
+                  }}
+                  onRemove={(url) => {
+                    setFormData((prev) => ({
+                      ...prev,
+                      additionalImages: prev.additionalImages.filter((u) => u !== url),
+                    }));
+                  }}
+                />
               </div>
             </div>
           )}

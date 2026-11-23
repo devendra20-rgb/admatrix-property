@@ -1,5 +1,5 @@
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -24,13 +24,15 @@ model Organization {
   campaigns   Campaign[]
   leads       Lead[]
   adCreatives AdCreative[]
+  mediaAssets MediaAsset[]
 }
 
 model User {
   id             String        @id @default(uuid())
   email          String        @unique
   name           String
-  role           String        @default("BROKER") // SUPER_ADMIN, BROKERAGE_ADMIN, BROKER
+  passwordHash   String        @default("")
+  role           String        @default("BROKER") // SUPER_ADMIN, BROKERAGE_ADMIN, BROKER, AGENT
   phone          String?
   organizationId String
   organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -41,6 +43,7 @@ model User {
   campaigns      Campaign[]
   assignedLeads  Lead[]        @relation("AssignedLeads")
   createdLeads   Lead[]        @relation("CreatedLeads")
+  uploadedMedia  MediaAsset[]
 }
 
 model Property {
@@ -95,6 +98,7 @@ model Property {
   leads               Lead[]
   adCreatives         AdCreative[]
   complianceLogs      ComplianceLog[]
+  mediaAssets         MediaAsset[]
 }
 
 model ComplianceLog {
@@ -133,6 +137,32 @@ model AdCreative {
   campaigns       Campaign[]
 }
 
+model MediaAsset {
+  id             String       @id @default(uuid())
+  key            String       @unique
+  bucket         String
+  fileName       String
+  fileSize       Int
+  mimeType       String
+  category       String       // PROPERTY_COVER, PROPERTY_IMAGE, AD_CREATIVE, COMPLIANCE_DOC
+  url            String
+  
+  propertyId     String?
+  property       Property?    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  creativeId     String?
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  uploadedById   String
+  uploadedBy     User         @relation(fields: [uploadedById], references: [id])
+  
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@index([propertyId])
+  @@index([category])
+}
+
 model Campaign {
   id              String   @id @default(uuid())
   name            String
@@ -160,17 +190,22 @@ model Campaign {
   createdBy       User         @relation(fields: [createdById], references: [id])
 
   // Performance metrics cache
-  spend           Float    @default(0)
-  impressions     Int      @default(0)
-  clicks          Int      @default(0)
-  leadsCount      Int      @default(0)
-  cpc             Float    @default(0)
-  cpl             Float    @default(0)
+  spend              Float    @default(0)
+  impressions        Int      @default(0)
+  clicks             Int      @default(0)
+  leadsCount         Int      @default(0)
+  cpc                Float    @default(0)
+  cpl                Float    @default(0)
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  // External provider integration & background sync
+  externalCampaignId String?
+  lastPublishError   String?
+  syncStatus         String   @default("IDLE") // IDLE, ENQUEUED, SYNCED, ERROR
 
-  leads           Lead[]
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  leads              Lead[]
 }
 
 model Lead {
@@ -213,13 +248,73 @@ model LeadActivity {
 }
 
 model WhatsAppMessage {
-  id          String   @id @default(uuid())
-  leadId      String
-  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  direction   String   // INBOUND, OUTBOUND
-  content     String
-  status      String   @default("DELIVERED") // SENT, DELIVERED, READ, FAILED
-  templateName String?
-  createdAt   DateTime @default(now())
+  id                String   @id @default(uuid())
+  leadId            String
+  lead              Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  direction         String   // INBOUND, OUTBOUND
+  content           String
+  status            String   @default("DELIVERED") // SENT, DELIVERED, READ, FAILED
+  templateName      String?
+  externalMessageId String?
+  organizationId    String?
+  createdAt         DateTime @default(now())
+}
+
+model OutboxEvent {
+  id             String    @id @default(uuid())
+  aggregateType  String    // CAMPAIGN, WHATSAPP, ANALYTICS
+  aggregateId    String
+  eventType      String    // CAMPAIGN_PUBLISH, WHATSAPP_OUTBOUND, ANALYTICS_DAILY_SYNC
+  payload        Json
+  status         String    @default("PENDING") // PENDING, CLAIMED, COMPLETED, FAILED
+  jobId          String?   @unique
+  retryCount     Int       @default(0)
+  lastError      String?
+  claimOwner     String?
+  claimedAt      DateTime?
+  claimExpiresAt DateTime?
+  organizationId String
+  createdAt      DateTime  @default(now())
+  processedAt    DateTime?
+
+  @@index([status, claimExpiresAt])
+  @@index([organizationId])
+  @@index([createdAt])
+}
+
+model WebhookEvent {
+  id             String    @id @default(uuid())
+  provider       String    // META, WHATSAPP, GOOGLE
+  eventId        String    // Unique provider message or event ID
+  eventType      String    // messages, status_update
+  payload        Json
+  status         String    @default("RECEIVED") // RECEIVED, PROCESSING, PROCESSED, FAILED
+  organizationId String?
+  createdAt      DateTime  @default(now())
+  processedAt    DateTime?
+
+  @@unique([provider, eventId])
+  @@index([createdAt])
+  @@index([organizationId])
+}
+
+model ProviderOperation {
+  id                String    @id @default(uuid())
+  provider          String    // META, GOOGLE, WHATSAPP
+  operationType     String    // CAMPAIGN_CREATE, CAMPAIGN_UPDATE, MESSAGE_SEND
+  entityId          String    // Campaign.id or WhatsAppMessage.id
+  idempotencyKey    String    @unique
+  status            String    @default("IN_FLIGHT") // IN_FLIGHT, CONFIRMED, AMBIGUOUS, FAILED
+  providerReference String?
+  requestPayload    Json
+  responsePayload   Json?
+  lastError         String?
+  attempts          Int       @default(1)
+  organizationId    String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([provider, entityId])
+  @@index([organizationId])
 }
 

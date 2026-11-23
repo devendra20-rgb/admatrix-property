@@ -124,6 +124,53 @@ export default function PropertyDetailsPage() {
               </div>
             </div>
 
+            {/* Additional Gallery Photos */}
+            {property.images && (() => {
+              try {
+                const gallery = typeof property.images === 'string' ? JSON.parse(property.images) : property.images;
+                if (Array.isArray(gallery) && gallery.length > 0) {
+                  return (
+                    <div className="bg-white p-4 rounded-2xl border border-[#E8EAF0] shadow-card space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-semibold text-[#151923]">S3 Media Gallery ({gallery.length} Photos)</h4>
+                        <span className="text-[10px] text-[#737B8C]">High-definition photography</span>
+                      </div>
+                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                        {gallery.map((imgUrl: string, idx: number) => (
+                          <div key={idx} className="relative aspect-video rounded-xl overflow-hidden border border-[#E8EAF0] bg-slate-100 group">
+                            <img src={imgUrl} alt={`Gallery ${idx + 1}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                }
+              } catch {}
+              return null;
+            })()}
+
+            {/* Verified Storage Assets */}
+            {property.mediaAssets && property.mediaAssets.length > 0 && (
+              <div className="bg-white p-4 rounded-2xl border border-[#E8EAF0] shadow-card space-y-3">
+                <h4 className="text-xs font-semibold text-[#151923]">S3 Verified Storage Assets ({property.mediaAssets.length})</h4>
+                <div className="space-y-2">
+                  {property.mediaAssets.map((asset: any) => (
+                    <div key={asset.id} className="flex items-center justify-between p-2.5 bg-[#F7F8FA] rounded-xl text-xs border border-[#E8EAF0]">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline">{asset.category}</Badge>
+                        <span className="font-medium text-[#151923] truncate max-w-[200px]">{asset.fileName}</span>
+                        <span className="text-[11px] text-[#737B8C]">({Math.round(asset.fileSize / 1024)} KB)</span>
+                      </div>
+                      <a href={asset.url} target="_blank" rel="noopener noreferrer" className="text-[#635BFF] hover:underline flex items-center gap-1 font-semibold text-[11px] shrink-0">
+                        <span>View Asset</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Description */}
             <div className="bg-white p-6 rounded-2xl border border-[#E8EAF0] shadow-card space-y-3">
               <h3 className="text-sm font-semibold text-[#151923]">Property Description</h3>

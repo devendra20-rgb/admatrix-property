@@ -1,7 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
+import { authenticate, tenantGuard } from '../middleware/auth.middleware.js';
 
 export const whatsappRouter = Router();
+
+whatsappRouter.use(authenticate, tenantGuard);
 
 whatsappRouter.post('/send', async (req: Request, res: Response) => {
   try {
@@ -11,13 +14,18 @@ whatsappRouter.post('/send', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'leadId and message are required' });
     }
 
-    const lead = await prisma.lead.findUnique({
-      where: { id: leadId },
+    const where: any = { id: leadId };
+    if (req.user!.role !== 'SUPER_ADMIN') {
+      where.organizationId = req.user!.organizationId;
+    }
+
+    const lead = await prisma.lead.findFirst({
+      where,
       include: { property: true },
     });
 
     if (!lead) {
-      return res.status(404).json({ success: false, error: 'Lead not found' });
+      return res.status(404).json({ success: false, error: 'Lead not found in your organization' });
     }
 
     const waMsg = await prisma.whatsAppMessage.create({
@@ -49,4 +57,3 @@ whatsappRouter.post('/send', async (req: Request, res: Response) => {
     res.status(500).json({ success: false, error: 'Failed to send WhatsApp message' });
   }
 });
-

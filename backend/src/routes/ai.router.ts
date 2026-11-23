@@ -1,18 +1,27 @@
 import { Router, Request, Response } from 'express';
 import { generateDubaiPropertyAds, AdGenerationParams } from '../services/ai.service.js';
 import { prisma } from '../lib/prisma.js';
+import { authenticate, tenantGuard } from '../middleware/auth.middleware.js';
 
 export const aiRouter = Router();
+
+aiRouter.use(authenticate, tenantGuard);
 
 aiRouter.post('/generate-ad', async (req: Request, res: Response) => {
   try {
     const body = req.body;
-    let property = null;
+    let property: any = null;
 
     if (body.propertyId) {
-      property = await prisma.property.findUnique({
-        where: { id: body.propertyId },
-      });
+      const where: any = { id: body.propertyId };
+      if (req.user!.role !== 'SUPER_ADMIN') {
+        where.organizationId = req.user!.organizationId;
+      }
+
+      property = await prisma.property.findFirst({ where });
+      if (!property) {
+        return res.status(404).json({ success: false, error: 'Specified property not found in your organization' });
+      }
     }
 
     const params: AdGenerationParams = {
@@ -38,4 +47,3 @@ aiRouter.post('/generate-ad', async (req: Request, res: Response) => {
     res.status(500).json({ success: false, error: 'Failed to generate ad copy' });
   }
 });
-

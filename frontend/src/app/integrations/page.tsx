@@ -68,7 +68,11 @@ export default function IntegrationsPage() {
   };
 
   return (
-    <AppShell title="Integrations & APIs" subtitle="Manage external channels for Meta, Google, WhatsApp, and DLD compliance">
+    <AppShell
+      title="Integrations & APIs"
+      subtitle="Manage external channels for Meta, Google, WhatsApp, and DLD compliance"
+      requiredRoles={['SUPER_ADMIN', 'BROKERAGE_ADMIN']}
+    >
       <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {integrations.map((item) => {

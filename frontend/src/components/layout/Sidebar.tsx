@@ -3,6 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useAuth, UserRole } from '@/lib/auth-context';
 import {
   LayoutDashboard,
   Building2,
@@ -16,8 +17,8 @@ import {
   CreditCard,
   HelpCircle,
   ShieldCheck,
-  ChevronRight,
-  Flame,
+  LogOut,
+  Sliders,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -27,30 +28,68 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed = false }: SidebarProps) {
   const pathname = usePathname();
+  const { user, organization, role, logout } = useAuth();
 
+  const isSuperAdmin = role === 'SUPER_ADMIN';
+  const isBrokerageAdmin = role === 'BROKERAGE_ADMIN';
+  const isBroker = role === 'BROKER';
+  const isAgent = role === 'AGENT';
+
+  // Navigation Items with explicit Role Permissions
   const workspaceNav = [
-    { name: 'Overview', href: '/', icon: LayoutDashboard },
-    { name: 'Properties', href: '/properties', icon: Building2 },
-    { name: 'Ad Studio', href: '/ad-studio', icon: Sparkles, badge: 'AI' },
-    { name: 'Campaigns', href: '/campaigns', icon: Megaphone },
-    { name: 'Leads', href: '/leads', icon: Users2 },
-    { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+    { name: 'Overview', href: '/', icon: LayoutDashboard, roles: ['SUPER_ADMIN', 'BROKERAGE_ADMIN', 'BROKER', 'AGENT'] },
+    { name: 'Properties', href: '/properties', icon: Building2, roles: ['SUPER_ADMIN', 'BROKERAGE_ADMIN', 'BROKER', 'AGENT'] },
+    { name: 'Ad Studio', href: '/ad-studio', icon: Sparkles, badge: 'AI', roles: ['SUPER_ADMIN', 'BROKERAGE_ADMIN', 'BROKER', 'AGENT'] },
+    { name: 'Campaigns', href: '/campaigns', icon: Megaphone, roles: ['SUPER_ADMIN', 'BROKERAGE_ADMIN', 'BROKER'] },
+    { name: 'Leads', href: '/leads', icon: Users2, roles: ['SUPER_ADMIN', 'BROKERAGE_ADMIN', 'BROKER', 'AGENT'] },
+    { name: 'Analytics', href: '/analytics', icon: BarChart3, roles: ['SUPER_ADMIN', 'BROKERAGE_ADMIN', 'BROKER'] },
   ];
 
   const managementNav = [
-    { name: 'Team', href: '/team', icon: Users },
-    { name: 'Integrations', href: '/integrations', icon: Layers },
+    { name: 'Team', href: '/team', icon: Users, roles: ['SUPER_ADMIN', 'BROKERAGE_ADMIN'] },
+    { name: 'Integrations', href: '/integrations', icon: Layers, roles: ['SUPER_ADMIN', 'BROKERAGE_ADMIN'] },
   ];
 
   const settingsNav = [
-    { name: 'Account Settings', href: '/settings', icon: Settings },
-    { name: 'Billing', href: '/settings#billing', icon: CreditCard },
-    { name: 'Help & Support', href: '/settings#support', icon: HelpCircle },
+    { name: 'Account Settings', href: '/settings', icon: Settings, roles: ['SUPER_ADMIN', 'BROKERAGE_ADMIN', 'BROKER', 'AGENT'] },
+    { name: 'Billing', href: '/settings#billing', icon: CreditCard, roles: ['SUPER_ADMIN', 'BROKERAGE_ADMIN'] },
+    { name: 'Help & Support', href: '/settings#support', icon: HelpCircle, roles: ['SUPER_ADMIN', 'BROKERAGE_ADMIN', 'BROKER', 'AGENT'] },
   ];
 
   const isActive = (path: string) => {
     if (path === '/') return pathname === '/';
     return pathname.startsWith(path);
+  };
+
+  const getInitials = (name?: string) => {
+    if (!name) return 'AP';
+    return name
+      .split(' ')
+      .map((n) => n[0])
+      .slice(0, 2)
+      .join('')
+      .toUpperCase();
+  };
+
+  const formatRoleLabel = (r?: UserRole | null) => {
+    switch (r) {
+      case 'SUPER_ADMIN':
+        return 'Platform Admin';
+      case 'BROKERAGE_ADMIN':
+        return 'Brokerage Admin';
+      case 'BROKER':
+        return 'Licensed Broker';
+      case 'AGENT':
+        return 'Junior Agent';
+      default:
+        return 'Broker';
+    }
+  };
+
+  const filterByRole = (items: { roles: string[] }[]) => {
+    if (!role) return [];
+    if (role === 'SUPER_ADMIN') return items;
+    return items.filter((item) => item.roles.includes(role));
   };
 
   return (
@@ -83,7 +122,7 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
             </div>
           )}
           <nav className="space-y-1">
-            {workspaceNav.map((item) => {
+            {filterByRole(workspaceNav).map((item: any) => {
               const active = isActive(item.href);
               const Icon = item.icon;
               return (
@@ -109,34 +148,36 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
           </nav>
         </div>
 
-        {/* Management */}
-        <div>
-          {!collapsed && (
-            <div className="px-3 mb-2 text-[11px] font-semibold tracking-wider text-[#737B8C] uppercase">
-              Management
-            </div>
-          )}
-          <nav className="space-y-1">
-            {managementNav.map((item) => {
-              const active = isActive(item.href);
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    active
-                      ? 'bg-[#F0EFFF] text-[#635BFF]'
-                      : 'text-[#4B5565] hover:bg-[#F7F8FA] hover:text-[#151923]'
-                  }`}
-                >
-                  <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-[#635BFF]' : 'text-[#737B8C]'}`} />
-                  {!collapsed && <span className="flex-1 truncate">{item.name}</span>}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
+        {/* Management (Hidden for Agents) */}
+        {filterByRole(managementNav).length > 0 && (
+          <div>
+            {!collapsed && (
+              <div className="px-3 mb-2 text-[11px] font-semibold tracking-wider text-[#737B8C] uppercase">
+                Management
+              </div>
+            )}
+            <nav className="space-y-1">
+              {filterByRole(managementNav).map((item: any) => {
+                const active = isActive(item.href);
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      active
+                        ? 'bg-[#F0EFFF] text-[#635BFF]'
+                        : 'text-[#4B5565] hover:bg-[#F7F8FA] hover:text-[#151923]'
+                    }`}
+                  >
+                    <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-[#635BFF]' : 'text-[#737B8C]'}`} />
+                    {!collapsed && <span className="flex-1 truncate">{item.name}</span>}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
+        )}
 
         {/* Settings */}
         <div>
@@ -146,7 +187,7 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
             </div>
           )}
           <nav className="space-y-1">
-            {settingsNav.map((item) => {
+            {filterByRole(settingsNav).map((item: any) => {
               const active = isActive(item.href);
               const Icon = item.icon;
               return (
@@ -183,19 +224,29 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
 
       {/* User / Org Footer */}
       <div className="p-3 border-t border-[#E8EAF0] bg-white">
-        <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-[#F7F8FA] cursor-pointer transition-colors">
+        <div className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-[#F7F8FA] transition-colors group">
           <div className="w-8 h-8 rounded-full bg-[#151923] text-white flex items-center justify-center text-xs font-semibold shrink-0">
-            HA
+            {getInitials(user?.name)}
           </div>
           {!collapsed && (
             <div className="flex-1 min-w-0">
-              <div className="text-xs font-semibold text-[#151923] truncate">Hamdan Al Maktoum</div>
-              <div className="text-[11px] text-[#737B8C] truncate">Apex Luxury Properties</div>
+              <div className="text-xs font-semibold text-[#151923] truncate">{user?.name || 'Agent'}</div>
+              <div className="text-[10px] text-[#635BFF] font-medium truncate">
+                {formatRoleLabel(role)}
+              </div>
             </div>
+          )}
+          {!collapsed && (
+            <button
+              onClick={() => logout()}
+              title="Sign Out"
+              className="text-[#737B8C] hover:text-[#E05252] p-1.5 rounded-lg hover:bg-white transition-colors"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
           )}
         </div>
       </div>
     </aside>
   );
 }
-

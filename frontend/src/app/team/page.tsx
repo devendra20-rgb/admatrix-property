@@ -79,7 +79,11 @@ export default function TeamManagementPage() {
   };
 
   return (
-    <AppShell title="Brokerage & Team" subtitle="Manage agent roster, roles, lead distribution, and campaign approval gates">
+    <AppShell
+      title="Brokerage & Team"
+      subtitle="Manage agent roster, roles, lead distribution, and campaign approval gates"
+      requiredRoles={['SUPER_ADMIN', 'BROKERAGE_ADMIN']}
+    >
       <div className="space-y-6">
         {/* Top Control Bar */}
         <div className="bg-white p-5 rounded-2xl border border-[#E8EAF0] shadow-card flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">

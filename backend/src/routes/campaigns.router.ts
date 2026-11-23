@@ -1,18 +1,25 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { validateTrakheesiCompliance } from '../services/compliance.service.js';
-import { ensureDbSeeded } from '../seed.js';
+import { authenticate, tenantGuard, requireRole } from '../middleware/auth.middleware.js';
 
 export const campaignsRouter = Router();
 
-// GET /api/campaigns
+campaignsRouter.use(authenticate, tenantGuard);
+
+// GET /api/campaigns (Multi-tenant scoped)
 campaignsRouter.get('/', async (req: Request, res: Response) => {
   try {
-    await ensureDbSeeded();
     const platform = req.query.platform as string;
     const status = req.query.status as string;
 
     const where: any = {};
+    if (req.user!.role !== 'SUPER_ADMIN') {
+      where.organizationId = req.user!.organizationId;
+    } else if (req.query.organizationId) {
+      where.organizationId = req.query.organizationId as string;
+    }
+
     if (platform) where.platform = platform;
     if (status) where.status = status;
 
@@ -46,22 +53,27 @@ campaignsRouter.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/campaigns
-campaignsRouter.post('/', async (req: Request, res: Response) => {
+// POST /api/campaigns (Multi-tenant scoped & compliance gated)
+campaignsRouter.post('/', requireRole('SUPER_ADMIN', 'BROKERAGE_ADMIN', 'BROKER'), async (req: Request, res: Response) => {
   try {
-    await ensureDbSeeded();
     const body = req.body;
 
     if (!body.propertyId) {
       return res.status(400).json({ success: false, error: 'Property ID is required' });
     }
 
-    const property = await prisma.property.findUnique({
-      where: { id: body.propertyId },
+    // Verify property belongs to caller's organization
+    const propWhere: any = { id: body.propertyId };
+    if (req.user!.role !== 'SUPER_ADMIN') {
+      propWhere.organizationId = req.user!.organizationId;
+    }
+
+    const property = await prisma.property.findFirst({
+      where: propWhere,
     });
 
     if (!property) {
-      return res.status(404).json({ success: false, error: 'Selected property does not exist' });
+      return res.status(404).json({ success: false, error: 'Selected property does not exist in your organization' });
     }
 
     const compliance = validateTrakheesiCompliance(property);
@@ -74,9 +86,6 @@ campaignsRouter.post('/', async (req: Request, res: Response) => {
         compliance,
       });
     }
-
-    const org = await prisma.organization.findFirst();
-    const user = await prisma.user.findFirst();
 
     const campaign = await prisma.campaign.create({
       data: {
@@ -95,8 +104,8 @@ campaignsRouter.post('/', async (req: Request, res: Response) => {
         targetAudience: body.targetAudience ? JSON.stringify(body.targetAudience) : null,
         propertyId: property.id,
         creativeId: body.creativeId || null,
-        organizationId: org!.id,
-        createdById: user!.id,
+        organizationId: req.user!.organizationId,
+        createdById: req.user!.userId,
         spend: 0,
         impressions: 0,
         clicks: 0,
@@ -118,11 +127,16 @@ campaignsRouter.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/campaigns/:id
+// GET /api/campaigns/:id (Multi-tenant protected)
 campaignsRouter.get('/:id', async (req: Request, res: Response) => {
   try {
-    const campaign = await prisma.campaign.findUnique({
-      where: { id: req.params.id },
+    const where: any = { id: req.params.id };
+    if (req.user!.role !== 'SUPER_ADMIN') {
+      where.organizationId = req.user!.organizationId;
+    }
+
+    const campaign = await prisma.campaign.findFirst({
+      where,
       include: {
         property: true,
         creative: true,
@@ -141,9 +155,19 @@ campaignsRouter.get('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// PATCH /api/campaigns/:id
-campaignsRouter.patch('/:id', async (req: Request, res: Response) => {
+// PATCH /api/campaigns/:id (Multi-tenant protected)
+campaignsRouter.patch('/:id', requireRole('SUPER_ADMIN', 'BROKERAGE_ADMIN', 'BROKER'), async (req: Request, res: Response) => {
   try {
+    const where: any = { id: req.params.id };
+    if (req.user!.role !== 'SUPER_ADMIN') {
+      where.organizationId = req.user!.organizationId;
+    }
+
+    const existing = await prisma.campaign.findFirst({ where });
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Campaign not found' });
+    }
+
     const body = req.body;
     const updated = await prisma.campaign.update({
       where: { id: req.params.id },
@@ -160,11 +184,16 @@ campaignsRouter.patch('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/campaigns/:id/publish
-campaignsRouter.post('/:id/publish', async (req: Request, res: Response) => {
+// POST /api/campaigns/:id/publish (Multi-tenant protected)
+campaignsRouter.post('/:id/publish', requireRole('SUPER_ADMIN', 'BROKERAGE_ADMIN', 'BROKER'), async (req: Request, res: Response) => {
   try {
-    const campaign = await prisma.campaign.findUnique({
-      where: { id: req.params.id },
+    const where: any = { id: req.params.id };
+    if (req.user!.role !== 'SUPER_ADMIN') {
+      where.organizationId = req.user!.organizationId;
+    }
+
+    const campaign = await prisma.campaign.findFirst({
+      where,
       include: { property: true },
     });
 
@@ -207,4 +236,3 @@ campaignsRouter.post('/:id/publish', async (req: Request, res: Response) => {
     res.status(500).json({ success: false, error: 'Failed to publish campaign' });
   }
 });
-

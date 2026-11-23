@@ -113,7 +113,11 @@ function NewCampaignContent() {
   };
 
   return (
-    <AppShell title="Launch Ad Campaign" subtitle="Compliant multi-channel campaign wizard for Meta & Google">
+    <AppShell
+      title="Launch Ad Campaign"
+      subtitle="Compliant multi-channel campaign wizard for Meta & Google"
+      requiredRoles={['SUPER_ADMIN', 'BROKERAGE_ADMIN', 'BROKER']}
+    >
       <div className="max-w-3xl mx-auto space-y-6">
         {/* Step Indicator Header */}
         <div className="bg-white p-6 rounded-2xl border border-[#E8EAF0] shadow-card space-y-6">

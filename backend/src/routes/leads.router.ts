@@ -1,25 +1,32 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
-import { ensureDbSeeded } from '../seed.js';
+import { authenticate, tenantGuard } from '../middleware/auth.middleware.js';
 
 export const leadsRouter = Router();
 
-// GET /api/leads
+leadsRouter.use(authenticate, tenantGuard);
+
+// GET /api/leads (Multi-tenant scoped)
 leadsRouter.get('/', async (req: Request, res: Response) => {
   try {
-    await ensureDbSeeded();
     const status = req.query.status as string;
     const propertyId = req.query.propertyId as string;
     const search = (req.query.search as string) || '';
 
     const where: any = {};
+    if (req.user!.role !== 'SUPER_ADMIN') {
+      where.organizationId = req.user!.organizationId;
+    } else if (req.query.organizationId) {
+      where.organizationId = req.query.organizationId as string;
+    }
+
     if (status) where.status = status;
     if (propertyId) where.propertyId = propertyId;
     if (search) {
       where.OR = [
-        { name: { contains: search } },
+        { name: { contains: search, mode: 'insensitive' } },
         { phone: { contains: search } },
-        { email: { contains: search } },
+        { email: { contains: search, mode: 'insensitive' } },
       ];
     }
 
@@ -49,18 +56,48 @@ leadsRouter.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/leads
+// POST /api/leads (Scoped to caller's organization)
 leadsRouter.post('/', async (req: Request, res: Response) => {
   try {
-    await ensureDbSeeded();
     const body = req.body;
 
     if (!body.name || !body.phone) {
       return res.status(400).json({ success: false, error: 'Name and Phone are required' });
     }
 
-    const org = await prisma.organization.findFirst();
-    const broker = await prisma.user.findFirst();
+    const organizationId = req.user!.organizationId;
+
+    // If propertyId supplied, verify it belongs to this organization
+    if (body.propertyId) {
+      const prop = await prisma.property.findFirst({
+        where: { id: body.propertyId, organizationId },
+      });
+      if (!prop) {
+        return res.status(400).json({ success: false, error: 'Associated property does not belong to your organization' });
+      }
+    }
+
+    // If campaignId supplied, verify it belongs to this organization (Zero-leakage isolation)
+    if (body.campaignId) {
+      const camp = await prisma.campaign.findFirst({
+        where: { id: body.campaignId, organizationId },
+      });
+      if (!camp) {
+        return res.status(400).json({ success: false, error: 'Associated campaign does not belong to your organization' });
+      }
+    }
+
+    // If assignedToId supplied, verify target agent belongs to this organization
+    let assignedToId = req.user!.userId;
+    if (body.assignedToId) {
+      const targetUser = await prisma.user.findFirst({
+        where: { id: body.assignedToId, organizationId },
+      });
+      if (!targetUser) {
+        return res.status(400).json({ success: false, error: 'Assigned agent does not belong to your organization' });
+      }
+      assignedToId = targetUser.id;
+    }
 
     const lead = await prisma.lead.create({
       data: {
@@ -72,8 +109,9 @@ leadsRouter.post('/', async (req: Request, res: Response) => {
         notes: body.notes || 'Inquired via real estate campaign',
         propertyId: body.propertyId || null,
         campaignId: body.campaignId || null,
-        organizationId: org!.id,
-        assignedToId: body.assignedToId || broker?.id || null,
+        organizationId,
+        assignedToId,
+        createdById: req.user!.userId,
       },
       include: {
         property: true,
@@ -86,7 +124,7 @@ leadsRouter.post('/', async (req: Request, res: Response) => {
         leadId: lead.id,
         type: 'STATUS_CHANGE',
         title: `Lead captured via ${lead.sourcePlatform}`,
-        details: `Assigned to ${broker?.name || 'Lead Pool'}. Source: ${lead.campaign?.name || 'Direct / Organic'}.`,
+        details: `Assigned to ${req.user!.name}. Source: ${lead.campaign?.name || 'Direct / Organic'}.`,
       },
     });
 
@@ -95,7 +133,7 @@ leadsRouter.post('/', async (req: Request, res: Response) => {
         leadId: lead.id,
         direction: 'OUTBOUND',
         templateName: 'dubai_property_lead_welcome_v1',
-        content: `Dear ${lead.name}, thank you for your interest in ${lead.property?.title || 'our luxury Dubai listings'}. A licensed property advisor from Apex Luxury Properties has been assigned to assist you.`,
+        content: `Dear ${lead.name}, thank you for your interest in ${lead.property?.title || 'our luxury Dubai listings'}. A licensed property advisor from our team has been assigned to assist you.`,
         status: 'DELIVERED',
       },
     });
@@ -106,11 +144,16 @@ leadsRouter.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/leads/:id
+// GET /api/leads/:id (Multi-tenant protected)
 leadsRouter.get('/:id', async (req: Request, res: Response) => {
   try {
-    const lead = await prisma.lead.findUnique({
-      where: { id: req.params.id },
+    const where: any = { id: req.params.id };
+    if (req.user!.role !== 'SUPER_ADMIN') {
+      where.organizationId = req.user!.organizationId;
+    }
+
+    const lead = await prisma.lead.findFirst({
+      where,
       include: {
         property: true,
         campaign: true,
@@ -130,14 +173,29 @@ leadsRouter.get('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// PATCH /api/leads/:id
+// PATCH /api/leads/:id (Multi-tenant protected)
 leadsRouter.patch('/:id', async (req: Request, res: Response) => {
   try {
-    const body = req.body;
-    const oldLead = await prisma.lead.findUnique({ where: { id: req.params.id } });
+    const where: any = { id: req.params.id };
+    if (req.user!.role !== 'SUPER_ADMIN') {
+      where.organizationId = req.user!.organizationId;
+    }
 
+    const oldLead = await prisma.lead.findFirst({ where });
     if (!oldLead) {
       return res.status(404).json({ success: false, error: 'Lead not found' });
+    }
+
+    const body = req.body;
+
+    // Verify assignedToId belongs to same organization
+    if (body.assignedToId && body.assignedToId !== oldLead.assignedToId) {
+      const targetUser = await prisma.user.findFirst({
+        where: { id: body.assignedToId, organizationId: oldLead.organizationId },
+      });
+      if (!targetUser) {
+        return res.status(400).json({ success: false, error: 'Assigned agent does not belong to your organization' });
+      }
     }
 
     const updated = await prisma.lead.update({
@@ -176,4 +234,3 @@ leadsRouter.patch('/:id', async (req: Request, res: Response) => {
     res.status(500).json({ success: false, error: 'Failed to update lead' });
   }
 });
-

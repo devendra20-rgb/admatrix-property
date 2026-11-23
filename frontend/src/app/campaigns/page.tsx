@@ -75,7 +75,11 @@ export default function CampaignsListPage() {
   const totalLeads = campaigns.reduce((acc, c) => acc + (c.leadsCount || 0), 0);
 
   return (
-    <AppShell title="Advertising Campaigns" subtitle="Manage automated Meta & Google property campaigns with compliance checks">
+    <AppShell
+      title="Advertising Campaigns"
+      subtitle="Manage automated Meta & Google property campaigns with compliance checks"
+      requiredRoles={['SUPER_ADMIN', 'BROKERAGE_ADMIN', 'BROKER']}
+    >
       <div className="space-y-6">
         {/* KPI Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

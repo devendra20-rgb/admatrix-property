@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useAuth, UserRole } from '@/lib/auth-context';
 import {
   Search,
   Bell,
@@ -14,6 +15,9 @@ import {
   UserCheck,
   CheckCircle2,
   AlertCircle,
+  LogOut,
+  Building2,
+  ShieldAlert,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -24,10 +28,11 @@ interface HeaderProps {
 
 export function Header({ title = 'Dashboard', subtitle }: HeaderProps) {
   const router = useRouter();
-  const [role, setRole] = useState<'BROKERAGE_ADMIN' | 'INDIVIDUAL_BROKER' | 'BROKER_AGENT' | 'SUPER_ADMIN'>('BROKERAGE_ADMIN');
+  const { user, organization, role, logout, simulateSwitchRole } = useAuth();
   const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [switching, setSwitching] = useState(false);
 
   const notifications = [
     {
@@ -61,16 +66,45 @@ export function Header({ title = 'Dashboard', subtitle }: HeaderProps) {
     }
   };
 
+  const handleRoleSwitch = async (targetRole: UserRole) => {
+    setSwitching(true);
+    setShowRoleMenu(false);
+    await simulateSwitchRole(targetRole);
+    setSwitching(false);
+  };
+
+  const getRoleDisplayName = (r?: UserRole | null) => {
+    switch (r) {
+      case 'SUPER_ADMIN':
+        return 'Platform Admin';
+      case 'BROKERAGE_ADMIN':
+        return 'Brokerage Admin';
+      case 'BROKER':
+        return 'Licensed Broker';
+      case 'AGENT':
+        return 'Junior Agent';
+      default:
+        return 'Broker';
+    }
+  };
+
   return (
     <header className="h-16 bg-white border-b border-[#E8EAF0] sticky top-0 z-20 px-6 flex items-center justify-between">
       {/* Title / Breadcrumb */}
       <div className="flex flex-col">
-        <h1 className="text-base font-semibold text-[#151923] tracking-tight">{title}</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-base font-semibold text-[#151923] tracking-tight">{title}</h1>
+          {organization?.name && (
+            <span className="hidden md:inline-flex items-center text-[10px] font-medium bg-[#F7F8FA] border border-[#E8EAF0] text-[#737B8C] px-2 py-0.5 rounded-full truncate max-w-[200px]">
+              {organization.name}
+            </span>
+          )}
+        </div>
         {subtitle && <p className="text-xs text-[#737B8C]">{subtitle}</p>}
       </div>
 
       {/* Center Global Search */}
-      <div className="flex-1 max-w-md mx-8">
+      <div className="flex-1 max-w-md mx-8 hidden sm:block">
         <form onSubmit={handleSearchSubmit} className="relative">
           <Search className="w-4 h-4 text-[#737B8C] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
@@ -89,50 +123,67 @@ export function Header({ title = 'Dashboard', subtitle }: HeaderProps) {
         <div className="relative">
           <button
             onClick={() => setShowRoleMenu(!showRoleMenu)}
+            disabled={switching}
             className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[#F7F8FA] border border-[#E8EAF0] hover:bg-[#F0EFFF] hover:text-[#635BFF] transition-colors"
           >
             <UserCheck className="w-3.5 h-3.5 text-[#635BFF]" />
-            <span>
-              {role === 'BROKERAGE_ADMIN' && 'Brokerage Admin'}
-              {role === 'INDIVIDUAL_BROKER' && 'Individual Broker'}
-              {role === 'BROKER_AGENT' && 'Agent'}
-              {role === 'SUPER_ADMIN' && 'Platform Admin'}
-            </span>
+            <span>{switching ? 'Switching...' : getRoleDisplayName(role)}</span>
             <ChevronDown className="w-3 h-3 text-[#737B8C]" />
           </button>
 
           {showRoleMenu && (
-            <div className="absolute right-0 mt-2 w-52 bg-white rounded-xl shadow-lg border border-[#E8EAF0] py-1.5 z-50 text-xs">
+            <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-[#E8EAF0] py-1.5 z-50 text-xs">
               <div className="px-3 py-1 text-[10px] uppercase font-bold text-[#737B8C] tracking-wider">
-                Simulate User Role
+                Switch Test Persona
               </div>
               <button
-                onClick={() => { setRole('BROKERAGE_ADMIN'); setShowRoleMenu(false); }}
+                onClick={() => handleRoleSwitch('BROKERAGE_ADMIN')}
                 className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-[#F7F8FA] ${role === 'BROKERAGE_ADMIN' ? 'font-semibold text-[#635BFF]' : 'text-[#151923]'}`}
               >
-                <span>Brokerage Admin</span>
+                <div>
+                  <div className="font-medium">Brokerage Admin</div>
+                  <div className="text-[10px] text-[#737B8C]">admin@apexrealty.ae</div>
+                </div>
                 {role === 'BROKERAGE_ADMIN' && <CheckCircle2 className="w-3.5 h-3.5 text-[#635BFF]" />}
               </button>
               <button
-                onClick={() => { setRole('INDIVIDUAL_BROKER'); setShowRoleMenu(false); }}
-                className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-[#F7F8FA] ${role === 'INDIVIDUAL_BROKER' ? 'font-semibold text-[#635BFF]' : 'text-[#151923]'}`}
+                onClick={() => handleRoleSwitch('BROKER')}
+                className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-[#F7F8FA] ${role === 'BROKER' ? 'font-semibold text-[#635BFF]' : 'text-[#151923]'}`}
               >
-                <span>Individual Broker</span>
-                {role === 'INDIVIDUAL_BROKER' && <CheckCircle2 className="w-3.5 h-3.5 text-[#635BFF]" />}
+                <div>
+                  <div className="font-medium">Licensed Broker</div>
+                  <div className="text-[10px] text-[#737B8C]">sarah@apexrealty.ae</div>
+                </div>
+                {role === 'BROKER' && <CheckCircle2 className="w-3.5 h-3.5 text-[#635BFF]" />}
               </button>
               <button
-                onClick={() => { setRole('BROKER_AGENT'); setShowRoleMenu(false); }}
-                className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-[#F7F8FA] ${role === 'BROKER_AGENT' ? 'font-semibold text-[#635BFF]' : 'text-[#151923]'}`}
+                onClick={() => handleRoleSwitch('AGENT')}
+                className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-[#F7F8FA] ${role === 'AGENT' ? 'font-semibold text-[#635BFF]' : 'text-[#151923]'}`}
               >
-                <span>Broker / Agent</span>
-                {role === 'BROKER_AGENT' && <CheckCircle2 className="w-3.5 h-3.5 text-[#635BFF]" />}
+                <div>
+                  <div className="font-medium">Junior Agent</div>
+                  <div className="text-[10px] text-[#737B8C]">junior@apexrealty.ae</div>
+                </div>
+                {role === 'AGENT' && <CheckCircle2 className="w-3.5 h-3.5 text-[#635BFF]" />}
               </button>
               <button
-                onClick={() => { setRole('SUPER_ADMIN'); setShowRoleMenu(false); }}
+                onClick={() => handleRoleSwitch('SUPER_ADMIN')}
                 className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-[#F7F8FA] ${role === 'SUPER_ADMIN' ? 'font-semibold text-[#635BFF]' : 'text-[#151923]'}`}
               >
-                <span>Platform Super Admin</span>
+                <div>
+                  <div className="font-medium">Platform Admin</div>
+                  <div className="text-[10px] text-[#737B8C]">superadmin@admatrix...</div>
+                </div>
                 {role === 'SUPER_ADMIN' && <CheckCircle2 className="w-3.5 h-3.5 text-[#635BFF]" />}
+              </button>
+
+              <div className="my-1 border-t border-[#E8EAF0]" />
+              <button
+                onClick={() => logout()}
+                className="w-full text-left px-3 py-2 flex items-center gap-2 text-rose-600 hover:bg-rose-50 font-medium"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Sign Out</span>
               </button>
             </div>
           )}
@@ -178,15 +229,16 @@ export function Header({ title = 'Dashboard', subtitle }: HeaderProps) {
           <span>Add Property</span>
         </Link>
 
-        <Link
-          href="/ad-studio"
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-[#635BFF] hover:bg-[#5248E2] text-white shadow-sm transition-colors"
-        >
-          <Sparkles className="w-3.5 h-3.5 text-white" />
-          <span>Create Ad</span>
-        </Link>
+        {role !== 'AGENT' && (
+          <Link
+            href="/ad-studio"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-[#635BFF] hover:bg-[#5248E2] text-white shadow-sm transition-colors"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-white" />
+            <span>Create Ad</span>
+          </Link>
+        )}
       </div>
     </header>
   );
 }
-
