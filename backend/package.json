@@ -9,6 +9,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "seed": "tsx src/seed.ts",
+    "db:migrate": "prisma migrate deploy",
     "test": "tsx src/verify-integration.ts",
     "test:api": "tsx src/test-api-endpoints.ts",
     "test:auth": "tsx src/test-auth-rbac-tenancy.ts",

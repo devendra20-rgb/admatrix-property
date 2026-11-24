@@ -113,6 +113,14 @@ mediaRouter.use(authenticate, tenantGuard);
  */
 mediaRouter.post('/presign-upload', async (req: Request, res: Response) => {
   try {
+    if (process.env.DISABLE_MEDIA_UPLOADS === 'true') {
+      res.status(503).json({
+        success: false,
+        error: 'Media uploads are temporarily disabled in this test deployment.',
+      });
+      return;
+    }
+
     const { fileName, fileSize, mimeType, category = 'PROPERTY_IMAGE', propertyId } = req.body;
 
     if (!fileName || typeof fileName !== 'string') {
@@ -189,6 +197,14 @@ mediaRouter.post('/presign-upload', async (req: Request, res: Response) => {
  */
 mediaRouter.post('/confirm', async (req: Request, res: Response) => {
   try {
+    if (process.env.DISABLE_MEDIA_UPLOADS === 'true') {
+      res.status(503).json({
+        success: false,
+        error: 'Media uploads are temporarily disabled in this test deployment.',
+      });
+      return;
+    }
+
     const { key, bucket, fileName, fileSize, mimeType, category, propertyId, creativeId } = req.body;
 
     if (!key || !fileName || !fileSize || !mimeType || !category) {

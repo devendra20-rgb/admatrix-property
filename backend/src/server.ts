@@ -19,8 +19,12 @@ export const app = express();
 const PORT = process.env.PORT || 5000;
 
 // CORS Configuration: Whitelist trusted origins and prevent credentialed wildcard reflection
+const configuredOrigins = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(',').map((o) => o.trim().replace(/\/+$/, ''))
+  : ['http://localhost:3000'];
+
 const ALLOWED_ORIGINS = [
-  process.env.FRONTEND_URL || 'http://localhost:3000',
+  ...configuredOrigins,
   'http://127.0.0.1:3000',
   'http://localhost:5000',
   'http://127.0.0.1:5000',
@@ -30,7 +34,12 @@ app.use(cors({
   origin: (origin, callback) => {
     // Allow non-browser agents (server-to-server, curl, test runners)
     if (!origin) return callback(null, true);
-    if (ALLOWED_ORIGINS.includes(origin) || (process.env.NODE_ENV !== 'production' && origin.startsWith('http://localhost:'))) {
+    const normalized = origin.replace(/\/+$/, '');
+    if (
+      ALLOWED_ORIGINS.includes(normalized) ||
+      (process.env.NODE_ENV !== 'production' && normalized.startsWith('http://localhost:')) ||
+      (process.env.NODE_ENV !== 'production' && normalized.startsWith('http://127.0.0.1:'))
+    ) {
       callback(null, true);
     } else {
       callback(new Error(`Origin ${origin} blocked by CORS security policy`));
@@ -91,10 +100,16 @@ if (process.env.NODE_ENV !== 'test') {
     console.log(`🌐 Base URL: http://localhost:${PORT}`);
     console.log(`=========================================`);
 
-    try {
-      await ensureDbSeeded();
-    } catch (err) {
-      console.error('Initial DB seed check error:', err);
+    // In production, automatic demo seeding is disabled unless explicitly enabled via SEED_DEMO_DATA=true
+    const autoSeedEnabled = process.env.NODE_ENV !== 'production' || process.env.SEED_DEMO_DATA === 'true';
+    if (autoSeedEnabled) {
+      try {
+        await ensureDbSeeded();
+      } catch (err) {
+        console.error('Initial DB seed check error:', err);
+      }
+    } else {
+      console.log('Production mode: Automatic demo seeding is disabled (set SEED_DEMO_DATA=true to enable).');
     }
   });
 }

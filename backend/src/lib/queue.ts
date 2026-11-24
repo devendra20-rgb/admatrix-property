@@ -9,14 +9,32 @@ const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6381';
  */
 export function getBullRedisOptions(): RedisOptions {
   const parsed = new URL(REDIS_URL);
-  return {
+  const isTls = parsed.protocol === 'rediss:';
+  const defaultPort = isTls ? 6379 : (REDIS_URL.includes('6381') ? 6381 : 6379);
+  const port = parsed.port ? parseInt(parsed.port, 10) : defaultPort;
+
+  const opts: RedisOptions = {
     host: parsed.hostname || 'localhost',
-    port: parseInt(parsed.port || '6381', 10),
+    port,
     maxRetriesPerRequest: null,
     retryStrategy(times: number) {
       return Math.min(times * 100, 3000);
     },
   };
+
+  if (parsed.password) {
+    opts.password = decodeURIComponent(parsed.password);
+  }
+
+  if (parsed.username && parsed.username !== 'default') {
+    opts.username = decodeURIComponent(parsed.username);
+  }
+
+  if (isTls) {
+    opts.tls = { rejectUnauthorized: false };
+  }
+
+  return opts;
 }
 
 export const QUEUE_NAMES = {

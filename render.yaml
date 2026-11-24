@@ -1,0 +1,99 @@
+# Render Blueprint for Admatrix Property (Temporary Live Testing)
+# Reference: https://render.com/docs/blueprint-spec
+
+services:
+  # ---------------------------------------------------------------------------
+  # 1. Express Backend Web Service
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: admatrix-backend
+    runtime: node
+    rootDir: backend
+    plan: starter
+    region: oregon
+    buildCommand: npm install && npx prisma generate && npx prisma migrate deploy && npm run build
+    startCommand: node dist/server.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: admatrix-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromKeyvalue:
+          name: admatrix-redis
+          property: connectionString
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        fromService:
+          type: web
+          name: admatrix-frontend
+          property: host
+          format: https://{host}
+      - key: BACKEND_URL
+        fromService:
+          type: web
+          name: admatrix-backend
+          property: host
+          format: https://{host}
+      - key: SEED_DEMO_DATA
+        value: "true"
+      - key: SEED_ACCOUNT_PASSWORD
+        sync: false
+      - key: DISABLE_MEDIA_UPLOADS
+        value: "false"
+      # Optional AWS S3 credentials (if omitted, falls back gracefully to local disk emulator)
+      - key: AWS_REGION
+        sync: false
+      - key: AWS_S3_BUCKET
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+
+  # ---------------------------------------------------------------------------
+  # 2. Next.js Frontend Web Service
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: admatrix-frontend
+    runtime: node
+    rootDir: frontend
+    plan: starter
+    region: oregon
+    buildCommand: npm install && npm run build
+    startCommand: npx next start -p $PORT
+    healthCheckPath: /login
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: BACKEND_URL
+        fromService:
+          type: web
+          name: admatrix-backend
+          property: host
+          format: https://{host}
+
+databases:
+  # ---------------------------------------------------------------------------
+  # 3. PostgreSQL Managed Database
+  # ---------------------------------------------------------------------------
+  - name: admatrix-postgres
+    plan: starter
+    region: oregon
+    databaseName: admatrix_property
+    user: admatrix
+
+keyvalues:
+  # ---------------------------------------------------------------------------
+  # 4. Redis-compatible Managed Key-Value
+  # ---------------------------------------------------------------------------
+  - name: admatrix-redis
+    plan: starter
+    region: oregon
+

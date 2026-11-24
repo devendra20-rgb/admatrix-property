@@ -193,7 +193,20 @@ npm run dev:frontend
   - Full Backend Regression Suite (`npm run test:all`): 108/108 S3 media storage tests passing, PostgreSQL integration audit (15/15), API audit, Auth RBAC, and Negative security all passing.
   - Next.js 14 Production Build (`npm run build`): All 16 static/dynamic routes compiled successfully.
 
-1. **Module 1**: Authentication & Multi-Tenant Roles (Simulate Brokerage Admin, Individual Broker, Agent, Super Admin).
+---
+
+## 7. Render Deployment Readiness (Temporary Live Testing)
+- **Backend Production Compilation**: `backend/tsconfig.json` updated to exclude test suites from production `tsc` build (`dist/server.js` compiles with 0 errors).
+- **Frontend Dynamic Port Binding**: `frontend/package.json` updated to `"start": "next start"` respecting Render dynamic `$PORT`.
+- **BullMQ Redis URL Parsing**: `backend/src/lib/queue.ts` updated to extract `username`, `password`, and configure `tls: { rejectUnauthorized: false }` for `rediss://`.
+- **CORS Multi-Origin Normalization**: `backend/src/server.ts` handles trailing slashes and comma-separated `FRONTEND_URL` entries.
+- **Database Migration Pipeline**: Added `"db:migrate": "prisma migrate deploy"` to `backend/package.json`.
+- **Infrastructure Blueprint**: Added root `render.yaml` orchestrating 4 services (`admatrix-backend`, `admatrix-frontend`, `admatrix-postgres`, `admatrix-redis`).
+- **Temporary Limitations Preserved**: AWS S3 production setup skipped (local storage emulator fallback active), WhatsApp simulation preserved, Meta/Google campaign toggle simulation preserved, and mock analytics intact.
+
+---
+
+## 8. Completed Modules
 2. **Module 2**: Dashboard / Executive Overview (Live KPIs, Spend vs. Lead charts, Trakheesi Guard status).
 3. **Module 3**: Property Management System (Search, filters, 6-stage property creation wizard, details view).
 4. **Module 4**: Trakheesi Compliance Engine (Permit validation, expiry, Madmoun QR, Form A, off-plan escrow check).

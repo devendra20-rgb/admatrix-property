@@ -5,7 +5,8 @@ import { AuthService } from './services/auth.service.js';
 export async function ensureDbSeeded() {
   try {
     const orgCount = await prisma.organization.count();
-    const defaultPasswordHash = await AuthService.hashPassword('Password123!');
+    const seedPassword = process.env.SEED_ACCOUNT_PASSWORD || 'Password123!';
+    const defaultPasswordHash = await AuthService.hashPassword(seedPassword);
 
     // 1. Ensure primary organization exists
     let mainOrg = await prisma.organization.findFirst({
